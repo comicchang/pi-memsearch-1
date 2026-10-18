@@ -106,13 +106,17 @@ export function createMemsearchExtension(deps: Partial<MemsearchDeps> = {}): (pi
       const messages = event.preparation.messagesToSummarize
       const userText = messages
         .filter((message) => message.role === 'user')
-        .map((message) => (typeof message.content === 'string' ? message.content : ''))
+        .map((message) =>
+          typeof message.content === 'string'
+            ? message.content
+            : message.content.map((part) => (part.type === 'text' ? part.text : '')).join('\n')
+        )
         .filter(Boolean)
         .slice(-5)
         .join('\n')
         .slice(-2000)
       if (userText.trim() === '') return
-      const { collection, options } = resolveTarget(ctx, env, backend, toolOptions(undefined))
+      const { collection, options } = resolveTarget(ctx, env, backend, toolOptions(event.signal))
       const hits = await backend.search(userText, collection, { ...options, topK: 5 }).catch(() => [])
       if (hits.length === 0) return
       messages.push({ role: 'user', content: `[memsearch memories]\n${formatHits(hits)}`, timestamp: 0 })

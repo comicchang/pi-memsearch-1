@@ -61,6 +61,39 @@ test('a failing search injects nothing and does not throw', async () => {
   equal(prep.messagesToSummarize.length, 1)
 })
 
+test('text parts of a pasted-screenshot message join the query', async () => {
+  const { calls, ctx, fire } = harness([okResult(VERSION_STDOUT), okResult(SEARCH_JSON)])
+  const prep = preparation([])
+  prep.messagesToSummarize.push({
+    role: 'user',
+    content: [
+      { type: 'text', text: 'fix the flaky redis test' },
+      { data: 'aGVsbG8=', mimeType: 'image/png', type: 'image' },
+    ],
+    timestamp: 0,
+  })
+
+  await fire('session_before_compact', { preparation: prep }, ctx)
+
+  equal(prep.messagesToSummarize.length, 2, 'the text part keeps the message in the query window')
+  const search = calls.find((call) => call.args.includes('search'))
+  ok(search)
+  match(search.args.join(' '), /fix the flaky redis test/)
+})
+
+test('the search carries the compaction abort signal', async () => {
+  const { calls, ctx, fire } = harness([okResult(VERSION_STDOUT), okResult(SEARCH_JSON)])
+  const prep = preparation(['fix the flaky redis test'])
+  const controller = new AbortController()
+
+  await fire('session_before_compact', { preparation: prep, signal: controller.signal }, ctx)
+
+  const search = calls.find((call) => call.args.includes('search'))
+  ok(search, 'the search ran while the compaction was live')
+  controller.abort()
+  equal(search.options.signal?.aborted, true, 'cancelling the compaction aborts the search')
+})
+
 test('no user text in the window injects nothing', async () => {
   const { ctx, fire } = harness([okResult(VERSION_STDOUT), okResult(SEARCH_JSON)])
   const prep = preparation([])
