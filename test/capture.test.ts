@@ -120,6 +120,21 @@ test('dispatch on both events distills the exchange only once', async () => {
   equal(requests.length, 1)
 })
 
+test('agent_end for an attempt that will retry captures nothing', async () => {
+  const { ctx, fire, requests, settle, tasks } = setup({
+    branch: [userEntry('u1', 'fix the login bug'), assistantEntry('a1', 'fixed it by escaping the query')],
+  })
+
+  await fire('agent_end', { willRetry: true }, ctx)
+  await Promise.all(tasks)
+
+  equal(requests.length, 0, 'the dead attempt is not distilled')
+  await settle()
+  await Promise.all(tasks)
+
+  equal(requests.length, 1, 'the retried exchange is distilled exactly once')
+})
+
 test('no assistant text means no entry and no distillation call', async () => {
   const { file, requests, settle, tasks } = setup({
     branch: [userEntry('u1', 'just a prompt'), assistantEntry('a1', undefined)],

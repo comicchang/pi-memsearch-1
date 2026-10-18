@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { parseIndexedChunks } from '../src/contract.ts'
 import type { ExecResult } from '../src/exec.ts'
-import { INDEX_DEBOUNCE_MS, SHUTDOWN_CAP_MS, shutdownCapMs } from '../src/indexer.ts'
+import { INDEX_DEBOUNCE_MS, SHUTDOWN_CAP_MS } from '../src/indexer.ts'
 import { deriveCollection } from '../src/scope.ts'
 import { errResult, INDEXED_STDOUT, okResult, STATS_STDOUT, timeoutResult, VERSION_STDOUT } from './fixtures.ts'
 import {
@@ -315,14 +315,23 @@ test('a hung index is aborted at the shutdown cap and deferred to the next catch
   equal(calls[2]?.options.signal?.aborted, false, 'the next catch-up runs with a fresh signal')
 })
 
-test('shutdown budget defaults to SHUTDOWN_CAP_MS and honors an override', () => {
-  equal(shutdownCapMs({}), SHUTDOWN_CAP_MS)
-  equal(shutdownCapMs({ PI_MEMSEARCH_SHUTDOWN_CAP_MS: '' }), SHUTDOWN_CAP_MS)
-  equal(shutdownCapMs({ PI_MEMSEARCH_SHUTDOWN_CAP_MS: '1500' }), 1500)
-})
+test('shutdown budget honors an override and rejects unusable values', async () => {
+  const sleeps: number[] = []
+  const { fire, ctx } = setupExtension([], {
+    prefix: 'shutdown-budget-',
+    env: { PI_MEMSEARCH_SHUTDOWN_CAP_MS: '1500' },
+    sleep: async (ms) => {
+      sleeps.push(ms)
+    },
+  })
+  await fire('session_start', { reason: 'startup' }, ctx)
+  await fire('session_shutdown', {}, ctx)
+  ok(sleeps.includes(1500), 'the settle race runs against the configured budget')
 
-test('shutdown budget ignores unusable overrides', () => {
-  equal(shutdownCapMs({ PI_MEMSEARCH_SHUTDOWN_CAP_MS: '0' }), SHUTDOWN_CAP_MS)
-  equal(shutdownCapMs({ PI_MEMSEARCH_SHUTDOWN_CAP_MS: '-1' }), SHUTDOWN_CAP_MS)
-  equal(shutdownCapMs({ PI_MEMSEARCH_SHUTDOWN_CAP_MS: 'nope' }), SHUTDOWN_CAP_MS)
+  throws(() => setupExtension([], { prefix: 'shutdown-budget-', env: { PI_MEMSEARCH_SHUTDOWN_CAP_MS: 'nope' } }), {
+    message: /PI_MEMSEARCH_SHUTDOWN_CAP_MS must be a positive integer/,
+  })
+  throws(() => setupExtension([], { prefix: 'shutdown-budget-', env: { PI_MEMSEARCH_SHUTDOWN_CAP_MS: '0' } }), {
+    message: /PI_MEMSEARCH_SHUTDOWN_CAP_MS must be a positive integer/,
+  })
 })

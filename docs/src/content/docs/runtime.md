@@ -67,7 +67,7 @@ Every settled exchange passes two gates before distillation:
 - the assistant produced text
 - the run was not aborted
 
-Capture listens on `agent_settled` and `agent_end` (`src/capture.ts`): pi marks a settled exchange with the former, while pi-family runtimes may dispatch only the latter. Whichever fires first claims the exchange by entry id, so hosts that dispatch both distill once.
+Capture listens on `agent_settled` and `agent_end` (`src/capture.ts`): pi marks a settled exchange with the former, while pi-family runtimes may dispatch only the latter. Whichever fires first claims the exchange by entry id, so hosts that dispatch both distill once. An `agent_end` that reports `willRetry` is skipped — that attempt is dead and its retry settles on its own.
 
 What passes is distilled by the cheapest model of the session's provider by default; `PI_MEMSEARCH_CAPTURE_MODEL` overrides, as `<id>` or `<provider>/<id>` (`src/distillation-model.ts`). Automatic memory therefore does not inflate the bill.
 

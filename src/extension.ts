@@ -9,6 +9,7 @@ import {
   type CommandOptions,
   createBackend,
   MissingCollectionError,
+  resolveTimeoutMs,
 } from './backend.ts'
 import { type BootstrapState, createBootstrap, ONNX_DOWNLOAD_NOTICE } from './bootstrap.ts'
 import { type Complete, DEFAULT_DISTILLATION_TIMEOUT_MS, registerCapture } from './capture.ts'
@@ -23,7 +24,7 @@ import {
 } from './cross-repo.ts'
 import { type ExecFn, execProcess } from './exec.ts'
 import { type IndexState, indexStatePath, readIndexState } from './index-state.ts'
-import { createIndexTriggers, shutdownCapMs } from './indexer.ts'
+import { createIndexTriggers, SHUTDOWN_CAP_MS } from './indexer.ts'
 import { appendMemoryEntry, dailyFilePathForKey, localDateKey } from './memory-file.ts'
 import {
   type CompactBlock,
@@ -67,6 +68,9 @@ export function createMemsearchExtension(deps: Partial<MemsearchDeps> = {}): (pi
   const exec = deps.exec ?? execProcess
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
   const spawnSidecar = deps.spawnSidecar ?? spawnSidecarProcess
+  // Resolved with the other timeouts so an unusable override fails at load
+  // instead of silently defaulting past a host's handler deadline.
+  const shutdownBudget = resolveTimeoutMs(env, 'PI_MEMSEARCH_SHUTDOWN_CAP_MS', SHUTDOWN_CAP_MS)
 
   return (pi) => {
     let repositoryDir: string | undefined
@@ -134,7 +138,7 @@ export function createMemsearchExtension(deps: Partial<MemsearchDeps> = {}): (pi
         await queue.flush()
         await indexer.settle()
       })()
-      const capped = sleep(shutdownCapMs(env)).then(() => {
+      const capped = sleep(shutdownBudget).then(() => {
         if (epoch !== shutdownEpoch) return
         captureAbort.abort()
         indexer.abortInFlight()
