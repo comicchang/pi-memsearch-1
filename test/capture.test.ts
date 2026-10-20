@@ -120,6 +120,20 @@ test('dispatch on both events distills the exchange only once', async () => {
   equal(requests.length, 1)
 })
 
+test('agent_end is ignored once the host has dispatched agent_settled', async () => {
+  const branch = [userEntry('u1', 'fix the login bug'), assistantEntry('a1', 'fixed it by escaping the query')]
+  const { ctx, fire, requests, settle, tasks } = setup({ branch })
+
+  await settle()
+  branch.push(userEntry('u2', 'now the signup bug'), assistantEntry('a2', 'fixed it too'))
+  await fire('agent_end', {}, ctx)
+  await Promise.all(tasks)
+
+  equal(requests.length, 1, 'the mid-turn agent_end does not capture')
+  await settle()
+  equal(requests.length, 2, 'agent_settled captures the next exchange')
+})
+
 test('agent_end for an attempt that will retry captures nothing', async () => {
   const { ctx, fire, requests, settle, tasks } = setup({
     branch: [userEntry('u1', 'fix the login bug'), assistantEntry('a1', 'fixed it by escaping the query')],

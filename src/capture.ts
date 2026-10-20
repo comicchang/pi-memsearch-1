@@ -44,6 +44,7 @@ export interface CaptureDeps {
 
 export function registerCapture(pi: ExtensionAPI, deps: CaptureDeps): void {
   let lastCapturedEntryId: string | undefined
+  let hasSeenSettled = false
 
   // Hosts disagree on which lifecycle event marks a settled exchange: pi
   // dispatches `agent_settled`, some pi-family runtimes dispatch only
@@ -94,8 +95,14 @@ export function registerCapture(pi: ExtensionAPI, deps: CaptureDeps): void {
       deps.onWrite(cwd)
     })
   }
-  pi.on('agent_settled', captureExchange)
-  pi.on('agent_end', captureExchange)
+  pi.on('agent_settled', (event, ctx) => {
+    hasSeenSettled = true
+    captureExchange(event, ctx)
+  })
+  pi.on('agent_end', (event, ctx) => {
+    if (hasSeenSettled) return
+    captureExchange(event, ctx)
+  })
 }
 
 async function distill(
